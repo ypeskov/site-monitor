@@ -62,7 +62,7 @@ export async function checkRoutes(fastify: FastifyInstance) {
 
   fastify.get("/run/check-queue", async (request, reply) => {
     const websites = await fastify.prisma.website.findMany();
-
+    fastify.log.info("Running bulk check");
     await Promise.all(
       websites.map((website) =>
         monitorQueue.add("check-website", { url: website.url })

@@ -20,7 +20,7 @@ export function createWorker(fastify: FastifyInstance) {
     new Worker(
         "monitorQueue",
         async (job) => {
-            console.log(`Checking website (attempt ${job.attemptsMade + 1}/${job.opts.attempts}):`, job.data);
+            fastify.log.info(`Checking website (attempt ${job.attemptsMade + 1}/${job.opts.attempts}):`, job.data);
             const { url } = job.data;
             const start = Date.now();
 
@@ -33,7 +33,7 @@ export function createWorker(fastify: FastifyInstance) {
                     data: { lastCheckedAt: new Date(), status: response.status.toString(), responseTime: time }
                 });
 
-                console.log(`Checked ${url}: ${response.status} (${time}ms)`);
+                fastify.log.info(`Checked ${url}: ${response.status} (${time}ms)`);
             } catch (error) {
                 console.error(`Error checking ${url} (attempt ${job.attemptsMade + 1}):`, error);
 
@@ -53,6 +53,9 @@ export function createWorker(fastify: FastifyInstance) {
 
 export async function schedulePeriodicChecks(fastify: FastifyInstance) {
     const websites = await fastify.prisma.website.findMany();
+    await monitorQueue.drain();
+    await monitorQueue.obliterate({ force: true });
+    fastify.log.info("Drained and obliterated monitorQueue");
 
     for (const site of websites) {
         monitorQueue.add(
@@ -60,10 +63,10 @@ export async function schedulePeriodicChecks(fastify: FastifyInstance) {
             { url: site.url },
             {
                 jobId: `check-website-${site.url}`,
-                repeat: { every: 5 * 60 * 1000 }, // Run every 5 minutes
+                repeat: { every: fastify.config.MINUTES_BETWEEN_CHECKS * 60 * 1000 }, // Run every N minutes
             }
         );
     }
 
-    console.log(`Scheduled periodic checks for ${websites.length} websites.`);
+    fastify.log.info(`Scheduled periodic checks for ${websites.length} websites.`);
 }
